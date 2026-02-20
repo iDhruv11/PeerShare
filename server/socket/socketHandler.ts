@@ -4,7 +4,7 @@ import {
   removePeer,
   getAllPeers,
   getPeer
-} from "../store/peerStore";
+} from "../store/peerStore.ts";
 
 export function registerSocketHandlers(
   io: Server,

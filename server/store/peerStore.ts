@@ -1,4 +1,4 @@
-import { Peer } from "../types";
+import type { Peer } from "../types/index.ts";
 
 const peers = new Map<string, Peer>();
 

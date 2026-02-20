@@ -4,7 +4,7 @@ import http from "http";
 import { Server } from "socket.io";
 
 import { registerSocketHandlers }
-  from "./socket/socketHandler";
+  from "./socket/socketHandler.ts";
 
 const app = express();
 
