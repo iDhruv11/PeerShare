@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { socket } from "./services/socket";
 import type { Peer } from "./types";
+import {
+  useWebRTC
+}
+  from "./hooks/useWebRTC";
 
 function App() {
 
@@ -17,6 +21,19 @@ function App() {
     setIncomingRequest] =
     useState("");
 
+  const [connectedPeer,
+    setConnectedPeer] =
+    useState("");
+
+  const [connectionState,
+    setConnectionState] =
+    useState("idle");
+
+  const {
+    peerConnection,
+    createPeerConnection
+  } = useWebRTC();
+
   useEffect(() => {
     socket.on(
       "peer-list",
@@ -30,6 +47,54 @@ function App() {
       ({ from }) => {
 
         setIncomingRequest(from);
+      }
+    );
+
+    socket.on(
+      "request-accepted",
+      async ({ from }) => {
+        setConnectedPeer(from);
+        await startOffer(from);
+      }
+    );
+
+    socket.on(
+      "offer",
+      async (offer) => {
+        const pc =
+          createPeerConnection();
+        await pc.setRemoteDescription(
+          offer
+        );
+        const answer =
+          await pc.createAnswer();
+        await pc.setLocalDescription(
+          answer
+        );
+
+        socket.emit(
+          "answer",
+          {
+            to: incomingRequest,
+            answer
+          }
+        );
+      }
+    );
+
+    socket.on(
+      "answer",
+      async (answer) => {
+        if (
+          !peerConnection.current
+        ) {
+          return;
+        }
+
+        await peerConnection.current
+          .setRemoteDescription(
+            answer
+          );
       }
     );
 
@@ -63,6 +128,42 @@ function App() {
         from: peerId,
         to: targetId
       }
+    );
+  }
+
+  async function startOffer(
+    targetId: string
+  ) {
+    setConnectionState(
+      "creating-offer"
+    );
+    const pc =
+      createPeerConnection();
+    const offer =
+      await pc.createOffer();
+    await pc.setLocalDescription(
+      offer
+    );
+
+    socket.emit(
+      "offer",
+      {
+        to: targetId,
+        offer
+      }
+    );
+  }
+
+  function acceptRequest() {
+    socket.emit(
+      "accept-request",
+      {
+        from: peerId,
+        to: incomingRequest
+      }
+    );
+    setConnectedPeer(
+      incomingRequest
     );
   }
 
@@ -100,6 +201,7 @@ function App() {
           <h3>
             Your ID: {peerId}
           </h3>
+          <hr />
           <h3>
             Online Peers
           </h3>
@@ -125,6 +227,8 @@ function App() {
               </div>
             ))}
 
+          <hr />
+
           {incomingRequest && (
             <div
               style={{
@@ -139,8 +243,38 @@ function App() {
                 {" "}
                 wants to connect
               </p>
+
+              <button
+                onClick={() =>
+                  acceptRequest()
+                }
+              >
+                Accept
+              </button>
             </div>
           )}
+          <div
+            style={{
+              marginTop: "20px"
+            }}
+          >
+
+            <hr />
+
+            <h3>
+              Connection
+            </h3>
+            <p>
+              Peer:
+              {" "}
+              {connectedPeer || "-"}
+            </p>
+            <p>
+              State:
+              {" "}
+              {connectionState}
+            </p>
+          </div>
         </>
       )}
     </div>
