@@ -29,6 +29,10 @@ function App() {
     setConnectionState] =
     useState("idle");
 
+  const [iceState,
+    setIceState] =
+    useState("waiting");
+
   const {
     peerConnection,
     createPeerConnection
@@ -63,6 +67,26 @@ function App() {
       async (offer) => {
         const pc =
           createPeerConnection();
+        pc.onconnectionstatechange =
+          () => {
+            setConnectionState(
+              pc.connectionState
+            );
+          };
+        pc.onicecandidate =
+          (event) => {
+            if (!event.candidate) {
+              return;
+            }
+            socket.emit(
+              "ice-candidate",
+              {
+                to: incomingRequest,
+                candidate:
+                  event.candidate
+              }
+            );
+          };
         await pc.setRemoteDescription(
           offer
         );
@@ -95,6 +119,30 @@ function App() {
           .setRemoteDescription(
             answer
           );
+      }
+    );
+
+    socket.on(
+      "ice-candidate",
+      async (candidate) => {
+        if (
+          !peerConnection.current
+        ) {
+          return;
+        }
+        try {
+          await peerConnection.current
+            .addIceCandidate(
+              candidate
+            );
+          setIceState(
+            "candidate-added"
+          );
+        } catch (error) {
+          console.error(
+            error
+          );
+        }
       }
     );
 
@@ -137,10 +185,28 @@ function App() {
     setConnectionState(
       "creating-offer"
     );
-    const pc =
-      createPeerConnection();
-    const offer =
-      await pc.createOffer();
+    const pc = createPeerConnection();
+    pc.onconnectionstatechange =
+      () => {
+        setConnectionState(
+          pc.connectionState
+        );
+      };
+    pc.onicecandidate =
+      (event) => {
+        if (!event.candidate) {
+          return;
+        }
+        socket.emit(
+          "ice-candidate",
+          {
+            to: targetId,
+            candidate:
+              event.candidate
+          }
+        );
+      };
+    const offer = await pc.createOffer();
     await pc.setLocalDescription(
       offer
     );
@@ -273,6 +339,11 @@ function App() {
               State:
               {" "}
               {connectionState}
+            </p>
+            <p>
+              ICE:
+              {" "}
+              {iceState}
             </p>
           </div>
         </>

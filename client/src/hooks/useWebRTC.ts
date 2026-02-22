@@ -1,12 +1,16 @@
 import { useRef } from "react";
 
 export function useWebRTC() {
+
   const peerConnection =
     useRef<RTCPeerConnection | null>(
       null
     );
 
   function createPeerConnection() {
+    if (peerConnection.current) {
+      return peerConnection.current;
+    }
     const pc =
       new RTCPeerConnection({
         iceServers: [
