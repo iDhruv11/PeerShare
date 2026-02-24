@@ -65,28 +65,43 @@ export function registerSocketHandlers(
 
   socket.on(
     "offer",
-    ({ to, offer }) => {
-      const target = getPeer(to);
+    ({ from, to, offer }) => {
+      const target =
+        getPeer(to);
+
       if (!target) {
         return;
       }
       io.to(target.socketId).emit(
         "offer",
-        offer
+        {
+          from,
+          offer
+        }
       );
     }
   );
 
   socket.on(
     "answer",
-    ({ to, answer }) => {
-      const target = getPeer(to);
+    ({ from, to, answer }) => {
+      console.log(
+        "SERVER ANSWER ROUTE:",
+        from,
+        "->",
+        to
+      );
+      const target =
+        getPeer(to);
       if (!target) {
         return;
       }
       io.to(target.socketId).emit(
         "answer",
-        answer
+        {
+          from,
+          answer
+        }
       );
     }
   );

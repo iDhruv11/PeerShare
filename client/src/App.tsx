@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { socket } from "./services/socket";
 import type { Peer } from "./types";
 import {
@@ -10,6 +10,9 @@ function App() {
 
   const [peerId, setPeerId] =
     useState("");
+
+  const peerIdRef = useRef("");
+  const incomingRequestRef = useRef("");
 
   const [registered, setRegistered] =
     useState(false);
@@ -24,6 +27,8 @@ function App() {
   const [connectedPeer,
     setConnectedPeer] =
     useState("");
+
+  const connectedPeerRef = useRef("");
 
   const [connectionState,
     setConnectionState] =
@@ -49,7 +54,7 @@ function App() {
     socket.on(
       "incoming-request",
       ({ from }) => {
-
+        incomingRequestRef.current = from;
         setIncomingRequest(from);
       }
     );
@@ -57,14 +62,20 @@ function App() {
     socket.on(
       "request-accepted",
       async ({ from }) => {
+        console.log("REQUEST ACCEPTED")
         setConnectedPeer(from);
+        connectedPeerRef.current = from;
         await startOffer(from);
       }
     );
 
     socket.on(
       "offer",
-      async (offer) => {
+      async ({ offer, from }) => {
+        console.log(
+          "CURRENT PEER ID:",
+          peerIdRef.current
+        );
         const pc =
           createPeerConnection();
         pc.onconnectionstatechange =
@@ -81,7 +92,7 @@ function App() {
             socket.emit(
               "ice-candidate",
               {
-                to: incomingRequest,
+                to: from,
                 candidate:
                   event.candidate
               }
@@ -90,16 +101,29 @@ function App() {
         await pc.setRemoteDescription(
           offer
         );
+        console.log("remote offer set")
         const answer =
           await pc.createAnswer();
+        console.log("answer created")
         await pc.setLocalDescription(
           answer
         );
-
+        console.log("local answer set")
+        console.log(
+          "SENDING ANSWER TO:",
+          incomingRequestRef.current
+        );
+        console.log(
+          "EMITTING ANSWER:",
+          peerIdRef.current,
+          "->",
+          from
+        );
         socket.emit(
           "answer",
           {
-            to: incomingRequest,
+            from: peerIdRef.current,
+            to: from,
             answer
           }
         );
@@ -108,17 +132,25 @@ function App() {
 
     socket.on(
       "answer",
-      async (answer) => {
-        if (
-          !peerConnection.current
-        ) {
+      async ({ answer, from }) => {
+        console.log(
+          "ANSWER RECEIVED FROM:",
+          from
+        );
+        console.log(
+          "ANSWER PAYLOAD:",
+          answer
+        );
+        if (!peerConnection.current) {
           return;
         }
-
         await peerConnection.current
           .setRemoteDescription(
             answer
           );
+        console.log(
+          "REMOTE ANSWER SET"
+        );
       }
     );
 
@@ -147,9 +179,22 @@ function App() {
     );
 
     return () => {
+
       socket.off("peer-list");
       socket.off(
         "incoming-request"
+      );
+      socket.off(
+        "request-accepted"
+      );
+      socket.off(
+        "offer"
+      );
+      socket.off(
+        "answer"
+      );
+      socket.off(
+        "ice-candidate"
       );
     };
 
@@ -159,9 +204,14 @@ function App() {
     if (!peerId.trim()) {
       return;
     }
+    peerIdRef.current = peerId;
+    console.log(
+      "REGISTERING:",
+      peerId
+    );
     socket.emit(
       "register-peer",
-      peerId
+      peerIdRef.current
     );
     setRegistered(true);
   }
@@ -182,6 +232,7 @@ function App() {
   async function startOffer(
     targetId: string
   ) {
+    console.log("start ofer")
     setConnectionState(
       "creating-offer"
     );
@@ -207,13 +258,22 @@ function App() {
         );
       };
     const offer = await pc.createOffer();
+    console.log("offer created")
     await pc.setLocalDescription(
       offer
     );
+    console.log("local offer set")
 
+    console.log(
+      "EMITTING OFFER:",
+      peerIdRef.current,
+      "->",
+      targetId
+    );
     socket.emit(
       "offer",
       {
+        from: peerIdRef.current,
         to: targetId,
         offer
       }
@@ -228,9 +288,8 @@ function App() {
         to: incomingRequest
       }
     );
-    setConnectedPeer(
-      incomingRequest
-    );
+    setConnectedPeer(incomingRequest);
+    connectedPeerRef.current = incomingRequest;
   }
 
   return (
