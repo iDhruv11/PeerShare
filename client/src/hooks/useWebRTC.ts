@@ -7,10 +7,17 @@ export function useWebRTC() {
       null
     );
 
+  const dataChannel =
+    useRef<RTCDataChannel | null>(
+      null
+    );
+
   function createPeerConnection() {
+
     if (peerConnection.current) {
       return peerConnection.current;
     }
+
     const pc =
       new RTCPeerConnection({
         iceServers: [
@@ -20,12 +27,15 @@ export function useWebRTC() {
           }
         ]
       });
+
     peerConnection.current = pc;
+
     return pc;
   }
 
   return {
     peerConnection,
+    dataChannel,
     createPeerConnection
   };
 }

@@ -40,10 +40,7 @@ function App() {
 
   const [channelState, setChannelState] = useState("closed");
 
-  const {
-    peerConnection,
-    createPeerConnection
-  } = useWebRTC();
+  const { peerConnection, dataChannel, createPeerConnection } = useWebRTC();
 
   useEffect(() => {
     socket.on(
@@ -81,6 +78,7 @@ function App() {
         const pc = createPeerConnection();
         pc.ondatachannel = (event) => {
           const channel = event.channel;
+          dataChannel.current = channel;
           channel.onopen = () => {
             console.log("DATA CHANNEL OPEN");
             setChannelState("open");
@@ -267,6 +265,8 @@ function App() {
       pc.createDataChannel(
         "chat"
       );
+
+    dataChannel.current = channel;
     channel.onopen = () => {
       console.log(
         "DATA CHANNEL OPEN"
