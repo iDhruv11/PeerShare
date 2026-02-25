@@ -38,6 +38,8 @@ function App() {
     setIceState] =
     useState("waiting");
 
+  const [channelState, setChannelState] = useState("closed");
+
   const {
     peerConnection,
     createPeerConnection
@@ -76,8 +78,26 @@ function App() {
           "CURRENT PEER ID:",
           peerIdRef.current
         );
-        const pc =
-          createPeerConnection();
+        const pc = createPeerConnection();
+        pc.ondatachannel = (event) => {
+          const channel = event.channel;
+          channel.onopen = () => {
+            console.log("DATA CHANNEL OPEN");
+            setChannelState("open");
+          };
+          channel.onclose = () => {
+            setChannelState(
+              "closed"
+            );
+          };
+        };
+        pc.oniceconnectionstatechange =
+          () => {
+            console.log(
+              "ICE STATE:",
+              pc.iceConnectionState
+            );
+          };
         pc.onconnectionstatechange =
           () => {
             setConnectionState(
@@ -86,6 +106,9 @@ function App() {
           };
         pc.onicecandidate =
           (event) => {
+            console.log(
+              "ICE CANDIDATE GENERATED"
+            );
             if (!event.candidate) {
               return;
             }
@@ -157,12 +180,13 @@ function App() {
     socket.on(
       "ice-candidate",
       async (candidate) => {
-        if (
-          !peerConnection.current
-        ) {
+        if (!peerConnection.current) {
           return;
         }
         try {
+          console.log(
+            "ICE CANDIDATE RECEIVED"
+          );
           await peerConnection.current
             .addIceCandidate(
               candidate
@@ -236,7 +260,35 @@ function App() {
     setConnectionState(
       "creating-offer"
     );
+
     const pc = createPeerConnection();
+
+    const channel =
+      pc.createDataChannel(
+        "chat"
+      );
+    channel.onopen = () => {
+      console.log(
+        "DATA CHANNEL OPEN"
+      );
+      setChannelState(
+        "open"
+      );
+    };
+
+    channel.onclose = () => {
+
+      setChannelState(
+        "closed"
+      );
+    };
+    pc.oniceconnectionstatechange =
+      () => {
+        console.log(
+          "ICE STATE:",
+          pc.iceConnectionState
+        );
+      };
     pc.onconnectionstatechange =
       () => {
         setConnectionState(
@@ -245,6 +297,9 @@ function App() {
       };
     pc.onicecandidate =
       (event) => {
+        console.log(
+          "ICE CANDIDATE GENERATED"
+        );
         if (!event.candidate) {
           return;
         }
@@ -403,6 +458,11 @@ function App() {
               ICE:
               {" "}
               {iceState}
+            </p>
+            <p>
+              Data Channel:
+              {" "}
+              {channelState}
             </p>
           </div>
         </>
