@@ -1,44 +1,35 @@
 import { useEffect, useState, useRef } from "react";
 import { socket } from "./services/socket";
 import type { Peer } from "./types";
-import {
-  useWebRTC
-}
-  from "./hooks/useWebRTC";
+import { useWebRTC } from "./hooks/useWebRTC";
 
 function App() {
 
-  const [peerId, setPeerId] =
-    useState("");
+  const [peerId, setPeerId] = useState("");
 
   const peerIdRef = useRef("");
+
   const incomingRequestRef = useRef("");
 
-  const [registered, setRegistered] =
-    useState(false);
+  const [registered, setRegistered] = useState(false);
 
-  const [peers, setPeers] =
-    useState<Peer[]>([]);
+  const [peers, setPeers] = useState<Peer[]>([]);
 
-  const [incomingRequest,
-    setIncomingRequest] =
-    useState("");
+  const [incomingRequest, setIncomingRequest] = useState("");
 
-  const [connectedPeer,
-    setConnectedPeer] =
-    useState("");
+  const [connectedPeer, setConnectedPeer] = useState("");
 
   const connectedPeerRef = useRef("");
 
-  const [connectionState,
-    setConnectionState] =
-    useState("idle");
+  const [connectionState, setConnectionState] = useState("idle");
 
-  const [iceState,
-    setIceState] =
-    useState("waiting");
+  const [iceState, setIceState] = useState("waiting");
 
   const [channelState, setChannelState] = useState("closed");
+
+  const [message, setMessage] = useState("");
+
+  const [messages, setMessages] = useState<string[]>([]);
 
   const { peerConnection, dataChannel, createPeerConnection } = useWebRTC();
 
@@ -88,8 +79,17 @@ function App() {
               "closed"
             );
           };
+          channel.onmessage = (event) => {
+            setMessages(
+              prev => [
+                ...prev,
+                `Peer: ${event.data}`
+              ]
+            );
+          };
         };
         pc.oniceconnectionstatechange =
+          pc.oniceconnectionstatechange =
           () => {
             console.log(
               "ICE STATE:",
@@ -276,6 +276,17 @@ function App() {
       );
     };
 
+    channel.onmessage =
+      (event) => {
+
+        setMessages(
+          prev => [
+            ...prev,
+            `Peer: ${event.data}`
+          ]
+        );
+      };
+
     channel.onclose = () => {
 
       setChannelState(
@@ -345,6 +356,26 @@ function App() {
     );
     setConnectedPeer(incomingRequest);
     connectedPeerRef.current = incomingRequest;
+  }
+
+  function sendMessage() {
+    if (!message.trim()) {
+      return;
+    }
+    if (!dataChannel.current) {
+      return;
+    }
+    dataChannel.current.send(
+      message
+    );
+    setMessages(
+      prev => [
+        ...prev,
+        `You: ${message}`
+      ]
+    );
+
+    setMessage("");
   }
 
   return (
@@ -464,6 +495,42 @@ function App() {
               {" "}
               {channelState}
             </p>
+
+            <hr />
+
+            <h3>
+              Chat
+            </h3>
+            <input
+              value={message}
+              onChange={(e) =>
+                setMessage(
+                  e.target.value
+                )
+              }
+              placeholder="Message"
+            />
+            <button
+              onClick={sendMessage}
+            >
+              Send
+            </button>
+            <div
+              style={{
+                marginTop: "10px"
+              }}
+            >
+              {messages.map(
+                (msg, index) => (
+                  <div
+                    key={index}
+                  >
+                    {msg}
+                  </div>
+                )
+              )}
+
+            </div>
           </div>
         </>
       )}
