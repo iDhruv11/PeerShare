@@ -52,7 +52,6 @@ function App() {
     socket.on(
       "request-accepted",
       async ({ from }) => {
-        console.log("REQUEST ACCEPTED")
         setConnectedPeer(from);
         connectedPeerRef.current = from;
         await startOffer(from);
@@ -62,10 +61,6 @@ function App() {
     socket.on(
       "offer",
       async ({ offer, from }) => {
-        console.log(
-          "CURRENT PEER ID:",
-          peerIdRef.current
-        );
         const pc = createPeerConnection();
         pc.ondatachannel = (event) => {
           const channel = event.channel;
@@ -104,9 +99,6 @@ function App() {
           };
         pc.onicecandidate =
           (event) => {
-            console.log(
-              "ICE CANDIDATE GENERATED"
-            );
             if (!event.candidate) {
               return;
             }
@@ -122,23 +114,10 @@ function App() {
         await pc.setRemoteDescription(
           offer
         );
-        console.log("remote offer set")
         const answer =
           await pc.createAnswer();
-        console.log("answer created")
         await pc.setLocalDescription(
           answer
-        );
-        console.log("local answer set")
-        console.log(
-          "SENDING ANSWER TO:",
-          incomingRequestRef.current
-        );
-        console.log(
-          "EMITTING ANSWER:",
-          peerIdRef.current,
-          "->",
-          from
         );
         socket.emit(
           "answer",
@@ -154,14 +133,6 @@ function App() {
     socket.on(
       "answer",
       async ({ answer, from }) => {
-        console.log(
-          "ANSWER RECEIVED FROM:",
-          from
-        );
-        console.log(
-          "ANSWER PAYLOAD:",
-          answer
-        );
         if (!peerConnection.current) {
           return;
         }
@@ -169,9 +140,6 @@ function App() {
           .setRemoteDescription(
             answer
           );
-        console.log(
-          "REMOTE ANSWER SET"
-        );
       }
     );
 
@@ -182,9 +150,6 @@ function App() {
           return;
         }
         try {
-          console.log(
-            "ICE CANDIDATE RECEIVED"
-          );
           await peerConnection.current
             .addIceCandidate(
               candidate
@@ -227,10 +192,6 @@ function App() {
       return;
     }
     peerIdRef.current = peerId;
-    console.log(
-      "REGISTERING:",
-      peerId
-    );
     socket.emit(
       "register-peer",
       peerIdRef.current
@@ -254,7 +215,6 @@ function App() {
   async function startOffer(
     targetId: string
   ) {
-    console.log("start ofer")
     setConnectionState(
       "creating-offer"
     );
@@ -308,9 +268,6 @@ function App() {
       };
     pc.onicecandidate =
       (event) => {
-        console.log(
-          "ICE CANDIDATE GENERATED"
-        );
         if (!event.candidate) {
           return;
         }
@@ -324,18 +281,10 @@ function App() {
         );
       };
     const offer = await pc.createOffer();
-    console.log("offer created")
     await pc.setLocalDescription(
       offer
     );
-    console.log("local offer set")
 
-    console.log(
-      "EMITTING OFFER:",
-      peerIdRef.current,
-      "->",
-      targetId
-    );
     socket.emit(
       "offer",
       {
