@@ -31,6 +31,10 @@ function App() {
 
   const [messages, setMessages] = useState<string[]>([]);
 
+  const [receivedText, setReceivedText] = useState("");
+
+  const chunkBufferRef = useRef<string[]>([]);
+
   const { peerConnection, dataChannel, createPeerConnection } = useWebRTC();
 
   useEffect(() => {
@@ -75,6 +79,20 @@ function App() {
             );
           };
           channel.onmessage = (event) => {
+            const payload = JSON.parse(event.data);
+            if (payload.type === "chunk") {
+              chunkBufferRef.current[payload.index] = payload.data;
+              if (chunkBufferRef.current.filter(Boolean).length === payload.total) {
+                const text = chunkBufferRef.current.join("");
+                setReceivedText(text);
+                console.log(
+                  "Reassembled:",
+                  text.length
+                );
+                chunkBufferRef.current = [];
+              }
+              return;
+            }
             setMessages(
               prev => [
                 ...prev,
@@ -236,19 +254,30 @@ function App() {
       );
     };
 
-    channel.onmessage =
-      (event) => {
-
-        setMessages(
-          prev => [
-            ...prev,
-            `Peer: ${event.data}`
-          ]
-        );
-      };
+    channel.onmessage = (event) => {
+      const payload = JSON.parse(event.data);
+      if (payload.type === "chunk") {
+        chunkBufferRef.current[payload.index] = payload.data;
+        if (chunkBufferRef.current.filter(Boolean).length === payload.total) {
+          const text = chunkBufferRef.current.join("");
+          setReceivedText(text);
+          console.log(
+            "Reassembled:",
+            text.length
+          );
+          chunkBufferRef.current = [];
+        }
+        return;
+      }
+      setMessages(
+        prev => [
+          ...prev,
+          `Peer: ${event.data}`
+        ]
+      );
+    };
 
     channel.onclose = () => {
-
       setChannelState(
         "closed"
       );
@@ -323,8 +352,38 @@ function App() {
         `You: ${message}`
       ]
     );
-
     setMessage("");
+  }
+
+  function generateLargeText() {
+    return "A".repeat(
+      500_000
+    );
+  }
+
+  function sendLargeText() {
+    if (!dataChannel.current) { return; }
+    const text = generateLargeText();
+    const chunkSize = 16_000;
+    const totalChunks = Math.ceil(
+      text.length /
+      chunkSize
+    );
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = text.slice(i * chunkSize, (i + 1) * chunkSize);
+      dataChannel.current.send(
+        JSON.stringify({
+          type: "chunk",
+          index: i,
+          total: totalChunks,
+          data: chunk
+        })
+      );
+    }
+    console.log(
+      "Sent chunks:",
+      totalChunks
+    );
   }
 
   return (
@@ -421,35 +480,15 @@ function App() {
 
             <hr />
 
-            <h3>
-              Connection
-            </h3>
-            <p>
-              Peer:
-              {" "}
-              {connectedPeer || "-"}
+            <h3> Connection </h3>
+            <p> Peer: {" "} {connectedPeer || "-"} </p>
+            <p> State: {" "} {connectionState}
             </p>
-            <p>
-              State:
-              {" "}
-              {connectionState}
+            <p> ICE: {" "} {iceState}
             </p>
-            <p>
-              ICE:
-              {" "}
-              {iceState}
-            </p>
-            <p>
-              Data Channel:
-              {" "}
-              {channelState}
-            </p>
-
+            <p> Data Channel: {" "} {channelState} </p>
             <hr />
-
-            <h3>
-              Chat
-            </h3>
+            <h3> Chat </h3>
             <input
               value={message}
               onChange={(e) =>
@@ -459,11 +498,8 @@ function App() {
               }
               placeholder="Message"
             />
-            <button
-              onClick={sendMessage}
-            >
-              Send
-            </button>
+            <button onClick={sendMessage} > Send </button>
+            <button onClick={sendLargeText} > Send 500KB </button>
             <div
               style={{
                 marginTop: "10px"
@@ -480,6 +516,9 @@ function App() {
               )}
 
             </div>
+            <hr />
+            <h3> Chunk Transfer </h3>
+            <p> Received: {" "} {receivedText.length} {" "} chars </p>
           </div>
         </>
       )}
