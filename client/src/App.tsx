@@ -3,6 +3,16 @@ import { socket } from "./services/socket";
 import type { Peer } from "./types";
 import { useWebRTC } from "./hooks/useWebRTC";
 
+type ChannelMessage = {
+  type: "chat";
+  text: string;
+} | {
+  type: "chunk";
+  index: number;
+  total: number;
+  data: string;
+};
+
 function App() {
 
   const [peerId, setPeerId] = useState("");
@@ -79,7 +89,16 @@ function App() {
             );
           };
           channel.onmessage = (event) => {
-            const payload = JSON.parse(event.data);
+            const payload = JSON.parse(event.data) as ChannelMessage;
+            if (payload.type === "chat") {
+              setMessages(
+                prev => [
+                  ...prev,
+                  `Peer: ${payload.text}`
+                ]
+              );
+              return;
+            }
             if (payload.type === "chunk") {
               chunkBufferRef.current[payload.index] = payload.data;
               if (chunkBufferRef.current.filter(Boolean).length === payload.total) {
@@ -93,12 +112,6 @@ function App() {
               }
               return;
             }
-            setMessages(
-              prev => [
-                ...prev,
-                `Peer: ${event.data}`
-              ]
-            );
           };
         };
         pc.oniceconnectionstatechange =
@@ -255,7 +268,16 @@ function App() {
     };
 
     channel.onmessage = (event) => {
-      const payload = JSON.parse(event.data);
+      const payload = JSON.parse(event.data) as ChannelMessage;
+      if (payload.type === "chat") {
+        setMessages(
+          prev => [
+            ...prev,
+            `Peer: ${payload.text}`
+          ]
+        );
+        return;
+      }
       if (payload.type === "chunk") {
         chunkBufferRef.current[payload.index] = payload.data;
         if (chunkBufferRef.current.filter(Boolean).length === payload.total) {
@@ -269,12 +291,6 @@ function App() {
         }
         return;
       }
-      setMessages(
-        prev => [
-          ...prev,
-          `Peer: ${event.data}`
-        ]
-      );
     };
 
     channel.onclose = () => {
@@ -343,8 +359,12 @@ function App() {
     if (!dataChannel.current) {
       return;
     }
+    const payload: ChannelMessage = {
+      type: "chat",
+      text: message
+    };
     dataChannel.current.send(
-      message
+      JSON.stringify(payload)
     );
     setMessages(
       prev => [
@@ -371,13 +391,14 @@ function App() {
     );
     for (let i = 0; i < totalChunks; i++) {
       const chunk = text.slice(i * chunkSize, (i + 1) * chunkSize);
+      const payload: ChannelMessage = {
+        type: "chunk",
+        index: i,
+        total: totalChunks,
+        data: chunk
+      };
       dataChannel.current.send(
-        JSON.stringify({
-          type: "chunk",
-          index: i,
-          total: totalChunks,
-          data: chunk
-        })
+        JSON.stringify(payload)
       );
     }
     console.log(
