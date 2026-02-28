@@ -11,40 +11,38 @@ type ChannelMessage = {
   index: number;
   total: number;
   data: string;
+} | {
+  type: "file-meta";
+  fileName: string;
+  totalChunks: number;
+} | {
+  type: "file-chunk";
+  index: number;
+  total: number;
+  data: string;
 };
 
 function App() {
 
   const [peerId, setPeerId] = useState("");
-
   const peerIdRef = useRef("");
-
   const incomingRequestRef = useRef("");
-
   const [registered, setRegistered] = useState(false);
-
   const [peers, setPeers] = useState<Peer[]>([]);
-
   const [incomingRequest, setIncomingRequest] = useState("");
-
   const [connectedPeer, setConnectedPeer] = useState("");
-
   const connectedPeerRef = useRef("");
-
   const [connectionState, setConnectionState] = useState("idle");
-
   const [iceState, setIceState] = useState("waiting");
-
   const [channelState, setChannelState] = useState("closed");
-
   const [message, setMessage] = useState("");
-
   const [messages, setMessages] = useState<string[]>([]);
-
   const [receivedText, setReceivedText] = useState("");
-
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [downloadUrl, setDownloadUrl] = useState("");
+  const [receivedFileName, setReceivedFileName] = useState("");
+  const fileChunksRef = useRef<string[]>([]);
   const chunkBufferRef = useRef<string[]>([]);
-
   const { peerConnection, dataChannel, createPeerConnection } = useWebRTC();
 
   useEffect(() => {
@@ -109,6 +107,27 @@ function App() {
                   text.length
                 );
                 chunkBufferRef.current = [];
+              }
+              return;
+            }
+            if (payload.type === "file-meta") {
+              setReceivedFileName(
+                payload.fileName
+              );
+              fileChunksRef.current = [];
+              return;
+            }
+            if (payload.type === "file-chunk") {
+              fileChunksRef.current[payload.index] = payload.data;
+              if (fileChunksRef.current
+                .filter(Boolean)
+                .length === payload.total
+              ) {
+                const text = fileChunksRef.current.join("");
+                const blob = new Blob([text]);
+                const url = URL.createObjectURL(blob);
+                setDownloadUrl(url);
+                fileChunksRef.current = [];
               }
               return;
             }
@@ -407,6 +426,42 @@ function App() {
     );
   }
 
+  async function sendFile() {
+    if (!selectedFile) { return; }
+    if (!dataChannel.current) { return; }
+    const text = await selectedFile.text();
+    const chunkSize = 16000;
+    const totalChunks = Math.ceil(
+      text.length /
+      chunkSize
+    );
+    const meta: ChannelMessage = {
+      type: "file-meta",
+      fileName: selectedFile.name,
+      totalChunks
+    };
+    dataChannel.current.send(
+      JSON.stringify(meta)
+    );
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = text.slice(i * chunkSize, (i + 1) * chunkSize);
+      const payload: ChannelMessage = {
+        type: "file-chunk",
+        index: i,
+        total: totalChunks,
+        data: chunk
+      };
+      dataChannel.current.send(
+        JSON.stringify(
+          payload
+        )
+      );
+    }
+    console.log(
+      "File sent"
+    );
+  }
+
   return (
     <div
       style={{
@@ -508,7 +563,9 @@ function App() {
             <p> ICE: {" "} {iceState}
             </p>
             <p> Data Channel: {" "} {channelState} </p>
+
             <hr />
+
             <h3> Chat </h3>
             <input
               value={message}
@@ -537,9 +594,47 @@ function App() {
               )}
 
             </div>
+
             <hr />
+
             <h3> Chunk Transfer </h3>
             <p> Received: {" "} {receivedText.length} {" "} chars </p>
+
+            <hr />
+
+            <h3> File Transfer </h3>
+            <input
+              type="file"
+              onChange={(e) => {
+                const file =
+                  e.target.files?.[0];
+                if (!file) {
+                  return;
+                }
+                setSelectedFile(
+                  file
+                );
+              }}
+            />
+            <button
+              onClick={sendFile}
+            >
+              Send File
+            </button>
+            {downloadUrl && (
+              <div>
+                <a
+                  href={downloadUrl}
+                  download={
+                    receivedFileName
+                  }
+                >
+                  Download
+                  {" "}
+                  {receivedFileName}
+                </a>
+              </div>
+            )}
           </div>
         </>
       )}
