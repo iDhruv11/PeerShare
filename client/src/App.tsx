@@ -13,14 +13,16 @@ type ChannelMessage = {
   data: string;
 } | {
   type: "file-meta";
+  transferId: string;
   fileName: string;
   totalChunks: number;
 } | {
   type: "file-chunk";
+  transferId: string;
   index: number;
   total: number;
   data: string;
-};
+}
 
 function App() {
 
@@ -41,7 +43,7 @@ function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [downloadUrl, setDownloadUrl] = useState("");
   const [receivedFileName, setReceivedFileName] = useState("");
-  const fileChunksRef = useRef<string[]>([]);
+  const activeTransfersRef = useRef<Record<string, { fileName: string; chunks: string[]; totalChunks: number; }>>({});
   const chunkBufferRef = useRef<string[]>([]);
   const { peerConnection, dataChannel, createPeerConnection } = useWebRTC();
 
@@ -111,23 +113,35 @@ function App() {
               return;
             }
             if (payload.type === "file-meta") {
-              setReceivedFileName(
-                payload.fileName
-              );
-              fileChunksRef.current = [];
+              activeTransfersRef.current[payload.transferId] = {
+                fileName: payload.fileName,
+                chunks: [],
+                totalChunks: payload.totalChunks
+              };
               return;
             }
             if (payload.type === "file-chunk") {
-              fileChunksRef.current[payload.index] = payload.data;
-              if (fileChunksRef.current
+              const transfer = activeTransfersRef.current[payload.transferId];
+              if (!transfer) {
+                return;
+              }
+              transfer.chunks[payload.index] = payload.data;
+              const received = transfer.chunks
                 .filter(Boolean)
-                .length === payload.total
-              ) {
-                const text = fileChunksRef.current.join("");
+                .length;
+
+              if (received === transfer.totalChunks) {
+                const text = transfer.chunks.join("");
+                console.log(
+                  "FILE COMPLETE:",
+                  transfer.fileName,
+                  text.length
+                );
                 const blob = new Blob([text]);
                 const url = URL.createObjectURL(blob);
+                setReceivedFileName(transfer.fileName);
                 setDownloadUrl(url);
-                fileChunksRef.current = [];
+                delete activeTransfersRef.current[payload.transferId];
               }
               return;
             }
@@ -435,22 +449,50 @@ function App() {
       text.length /
       chunkSize
     );
+    const transferId = crypto.randomUUID();
     const meta: ChannelMessage = {
       type: "file-meta",
+      transferId,
       fileName: selectedFile.name,
       totalChunks
     };
+    console.log(
+      "TRANSFER:",
+      transferId,
+      totalChunks,
+      "chunks"
+    );
     dataChannel.current.send(
       JSON.stringify(meta)
     );
     for (let i = 0; i < totalChunks; i++) {
-      const chunk = text.slice(i * chunkSize, (i + 1) * chunkSize);
-      const payload: ChannelMessage = {
-        type: "file-chunk",
+      while (dataChannel.current.bufferedAmount > 1_000_000) {
+        await new Promise(
+          resolve =>
+            setTimeout(
+              resolve,
+              10
+            )
+        );
+      }
+      const chunk =
+        text.slice(
+          i * chunkSize,
+          (i + 1) *
+          chunkSize
+        );
+
+      const payload:
+        ChannelMessage = {
+        type:
+          "file-chunk",
+        transferId,
         index: i,
-        total: totalChunks,
+        total:
+          totalChunks,
         data: chunk
       };
+
       dataChannel.current.send(
         JSON.stringify(
           payload
@@ -458,7 +500,8 @@ function App() {
       );
     }
     console.log(
-      "File sent"
+      "FILE SENT:",
+      transferId
     );
   }
 
@@ -623,6 +666,10 @@ function App() {
             </button>
             {downloadUrl && (
               <div>
+                <p>
+                  URL:
+                  {downloadUrl}
+                </p>
                 <a
                   href={downloadUrl}
                   download={
