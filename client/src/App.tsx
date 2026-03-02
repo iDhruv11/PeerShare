@@ -43,6 +43,8 @@ function App() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [downloadUrl, setDownloadUrl] = useState("");
   const [receivedFileName, setReceivedFileName] = useState("");
+  const [sendProgress, setSendProgress] = useState(0);
+  const [receiveProgress, setReceiveProgress] = useState(0);
   const activeTransfersRef = useRef<Record<string, { fileName: string; chunks: string[]; totalChunks: number; }>>({});
   const chunkBufferRef = useRef<string[]>([]);
   const { peerConnection, dataChannel, createPeerConnection } = useWebRTC();
@@ -130,6 +132,8 @@ function App() {
                 .filter(Boolean)
                 .length;
 
+              setReceiveProgress(Math.floor((received / transfer.totalChunks) * 100));
+
               if (received === transfer.totalChunks) {
                 const text = transfer.chunks.join("");
                 console.log(
@@ -141,6 +145,7 @@ function App() {
                 const url = URL.createObjectURL(blob);
                 setReceivedFileName(transfer.fileName);
                 setDownloadUrl(url);
+                setReceiveProgress(100);
                 delete activeTransfersRef.current[payload.transferId];
               }
               return;
@@ -443,6 +448,7 @@ function App() {
   async function sendFile() {
     if (!selectedFile) { return; }
     if (!dataChannel.current) { return; }
+    setSendProgress(0);
     const text = await selectedFile.text();
     const chunkSize = 16000;
     const totalChunks = Math.ceil(
@@ -498,6 +504,7 @@ function App() {
           payload
         )
       );
+      setSendProgress(Math.floor(((i + 1) / totalChunks) * 100));
     }
     console.log(
       "FILE SENT:",
@@ -646,6 +653,8 @@ function App() {
             <hr />
 
             <h3> File Transfer </h3>
+            <p> Send Progress: {" "} {sendProgress} % </p>
+            <p> Receive Progress: {" "} {receiveProgress} % </p>
             <input
               type="file"
               onChange={(e) => {
