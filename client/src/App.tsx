@@ -2,6 +2,7 @@ import { useEffect, useState, useRef } from "react";
 import { socket } from "./services/socket";
 import type { Peer } from "./types";
 import { useWebRTC } from "./hooks/useWebRTC";
+import "./styles.css";
 
 type ChannelMessage = {
   type: "chat";
@@ -39,6 +40,7 @@ function App() {
   const [channelState, setChannelState] = useState("closed");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<string[]>([]);
+  const [transfers, setTransfers] = useState<string[]>([]);
   const [receivedText, setReceivedText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [downloadUrl, setDownloadUrl] = useState("");
@@ -247,6 +249,11 @@ function App() {
         const url = URL.createObjectURL(blob);
         setReceivedFileName(transfer.fileName);
         setDownloadUrl(url);
+        setTransfers(prev => [
+          `↓ ${transfer.fileName}`,
+          ...prev
+        ].slice(0, 10)
+        );
         delete activeTransfersRef.current[payload.transferId];
       }
     }
@@ -483,18 +490,57 @@ function App() {
       "FILE SENT:",
       transferId
     );
+    setTransfers(prev => [
+      `↑ ${selectedFile.name}`,
+      ...prev
+    ].slice(0, 10)
+    );
   }
 
   return (
     <div
       style={{
-        padding: "24px"
+        minHeight: "100vh",
+        padding: "32px",
+        maxWidth: "1400px",
+        margin: "0 auto"
       }}
     >
 
-      <h1>
-        PortShare
-      </h1>
+      <div style={{ marginBottom: "24px" }} >
+        <h1
+          style={{
+            fontSize: "56px",
+            fontWeight: 800,
+            marginBottom: "12px",
+            color: "#ffffff",
+            letterSpacing: "-2px"
+          }}
+        >
+          PortShare
+        </h1>
+
+        <p
+          style={{
+            color: "#58a6ff",
+            fontSize: "18px",
+            fontWeight: 500
+          }}
+        >
+          Peer-to-peer file sharing
+          over WebRTC
+        </p>
+        <p
+          style={{
+            color: "#6e7681",
+            fontSize: "14px",
+            marginTop: "8px"
+          }}
+        >
+          Direct browser-to-browser
+          file sharing
+        </p>
+      </div>
       {!registered && (
         <div>
           <input
@@ -507,6 +553,15 @@ function App() {
             placeholder="Peer ID"
           />
           <button
+            style={{
+              background: "#1f6feb",
+              border: "none",
+              borderRadius: "10px",
+              padding: "10px 18px",
+              color: "white",
+              fontWeight: 600,
+              cursor: "pointer"
+            }}
             onClick={registerPeer}
           >
             Join
@@ -516,158 +571,404 @@ function App() {
 
       {registered && (
         <>
-          <h3>
-            Your ID: {peerId}
-          </h3>
-          <hr />
-          <h3>
-            Online Peers
-          </h3>
-          {peers
-            .filter(
-              p => p.id !== peerId
-            )
-            .map(peer => (
-              <div
-                key={peer.id}
-              >
-                {peer.id}
-                <button
-                  onClick={() =>
-                    connectToPeer(
-                      peer.id
-                    )
-                  }
-                >
-                  Connect
-                </button>
-
-              </div>
-            ))}
-
-          <hr />
-
-          {incomingRequest && (
-            <div
-              style={{
-                marginTop: "20px"
-              }}
-            >
-              <h3>
-                Incoming Request
-              </h3>
-              <p>
-                {incomingRequest}
-                {" "}
-                wants to connect
-              </p>
-
-              <button
-                onClick={() =>
-                  acceptRequest()
-                }
-              >
-                Accept
-              </button>
-            </div>
-          )}
           <div
             style={{
-              marginTop: "20px"
+              display: "grid",
+              gridTemplateColumns: "320px 1fr",
+              gap: "20px",
+              marginBottom: "20px"
             }}
           >
 
-            <hr />
-
-            <h3> Connection </h3>
-            <p> Peer: {" "} {connectedPeer || "-"} </p>
-            <p> State: {" "} {connectionState}
-            </p>
-            <p> ICE: {" "} {iceState}
-            </p>
-            <p> Data Channel: {" "} {channelState} </p>
-
-            <hr />
-
-            <h3> Chat </h3>
-            <input
-              value={message}
-              onChange={(e) =>
-                setMessage(
-                  e.target.value
-                )
-              }
-              placeholder="Message"
-            />
-            <button onClick={sendMessage} > Send </button>
-            <button onClick={sendLargeText} > Send 500KB </button>
             <div
               style={{
-                marginTop: "10px"
+                background: "#111827",
+                border: "1px solid #1f2937",
+                borderRadius: "18px",
+                padding: "20px"
               }}
             >
-              {messages.map(
-                (msg, index) => (
+              <h3> Your ID </h3>
+
+              <p
+                style={{
+                  color: "#58a6ff",
+                  fontSize: "18px",
+                  fontWeight: 500,
+                  marginBottom: "16px"
+                }}
+              >
+                {peerId}
+              </p>
+
+              <h3> Online Peers </h3>
+
+              {peers
+                .filter(peer => peer.id !== peerId)
+                .map(peer => (
                   <div
-                    key={index}
+                    key={peer.id}
+                    style={{
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                      marginTop: "12px"
+                    }}
                   >
-                    {msg}
+                    <div>
+                      <span
+                        style={{
+                          display: "inline-block",
+                          width: "8px",
+                          height: "8px",
+                          borderRadius: "999px",
+                          background: "#58a6ff",
+                          marginRight: "10px"
+                        }}
+                      >
+                      </span>
+                      {peer.id}
+                    </div>
+
+                    {connectedPeer === peer.id ? (
+                      <span
+                        style={{
+                          color: "#58a6ff",
+                          fontSize: "14px"
+                        }}
+                      >
+                        Connected
+                      </span>
+                    ) : (
+                      <button
+                        style={{
+                          background: "#1f6feb",
+                          border: "none",
+                          borderRadius: "10px",
+                          padding: "10px 18px",
+                          color: "white",
+                          fontWeight: 600,
+                          cursor: "pointer"
+                        }}
+                        onClick={() => connectToPeer(peer.id)}
+                      >
+                        Connect
+                      </button>
+                    )}
                   </div>
-                )
-              )}
+                ))}
+            </div>
+
+            <div
+              style={{
+                background: "#111827",
+                border: "1px solid #1f2937",
+                borderRadius: "18px",
+                padding: "20px"
+              }}
+            >
+              <h3> Connection </h3>
+
+              <p> Peer: {" "} {connectedPeer || "-"} </p>
+
+              <p> Status: {" "}
+                <span
+                  style={{
+                    background: "#1f6feb",
+                    padding: "2px 10px",
+                    borderRadius: "999px",
+                    fontSize: "12px"
+                  }}
+                >
+                  Connected
+                </span>
+              </p>
+
+              <p> ICE: {" "} {iceState} </p>
+
+              <p> Data Channel: {" "}
+                <span
+                  style={{
+                    background: channelState === "open" ? "#1f6feb" : "#f85149",
+                    padding: "2px 8px",
+                    borderRadius: "999px",
+                    fontSize: "12px"
+                  }}
+                >
+                  {channelState}
+                </span>
+              </p>
 
             </div>
 
-            <hr />
+          </div>
 
-            <h3> Chunk Transfer </h3>
-            <p> Received: {" "} {receivedText.length} {" "} chars </p>
+          {
+            incomingRequest && connectionState != "connected" && (
+              <div
+                style={{
+                  background:
+                    "#1f6feb20",
+                  border:
+                    "1px solid #1f6feb",
+                  borderRadius:
+                    "12px",
+                  padding: "16px",
+                  marginBottom:
+                    "20px"
+                }}
+              >
+                <h3> Incoming Request </h3>
 
-            <hr />
+                <p> {incomingRequest} {" "} wants to connect </p>
+                <div style={{ marginTop: "12px" }} >
+                  <button
+                    style={{
+                      background: "#1f6feb",
+                      border: "none",
+                      borderRadius: "10px",
+                      padding: "10px 18px",
+                      color: "white",
+                      fontWeight: 600,
+                      cursor: "pointer"
+                    }}
+                    onClick={acceptRequest}
+                  >
+                    Accept Request
+                  </button>
+                </div>
+              </div>
+            )
+          }
 
-            <h3> File Transfer </h3>
-            <p> Send Progress: {" "} {sendProgress} % </p>
-            <p> Receive Progress: {" "} {receiveProgress} % </p>
-            <input
-              type="file"
-              onChange={(e) => {
-                const file =
-                  e.target.files?.[0];
-                if (!file) {
-                  return;
-                }
-                setSelectedFile(
-                  file
-                );
+          <div
+            style={{
+              background: "#111827",
+              border: "1px solid #1f2937",
+              borderRadius: "18px",
+              padding: "20px",
+              marginBottom: "20px"
+            }}
+          >
+            <h3> Chat </h3>
+
+            <div
+              style={{
+                maxHeight: "320px",
+                overflowY: "auto",
+                marginTop: "12px",
+                marginBottom: "12px"
               }}
-            />
-            <button
-              onClick={sendFile}
             >
-              Send File
-            </button>
+              {messages.map((msg, index) => {
+                const isYou = msg.startsWith("You:");
+                return (
+                  <div
+                    key={index}
+                    style={{
+                      display: "flex",
+                      justifyContent: isYou ? "flex-end" : "flex-start",
+                      marginBottom: "8px"
+                    }}
+                  >
+                    <div
+                      style={{
+                        background: isYou ? "#1f6feb" : "#1e293b",
+                        padding: "8px 12px",
+                        borderRadius: "16px",
+                        maxWidth: "70%"
+                      }}
+                    >
+                      {msg.replace("You:", "").replace("Peer:", "")}
+                    </div>
+                  </div>
+                );
+              }
+              )}
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "8px"
+              }}
+            >
+              <input
+                value={message}
+                onChange={(e) =>
+                  setMessage(e.target.value)
+                }
+                placeholder="Type message..."
+                style={{ flex: 1 }}
+              />
+
+              <button
+                style={{
+                  background: "#1f6feb",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "10px 18px",
+                  color: "white",
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+                onClick={sendMessage}> Send </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: "#111827",
+              border: "1px solid #1f2937",
+              borderRadius: "18px",
+              padding: "20px"
+            }}
+          >
+            <h3> File Transfer </h3>
+
+            <p> Send Progress: {" "} {sendProgress} % </p>
+            <div
+              style={{
+                height: "8px",
+                background: "#0f172a",
+                border: "1px solid #1e293b",
+                borderRadius: "999px",
+                overflow: "hidden",
+                marginBottom: "12px"
+              }}
+            >
+              <div
+                style={{
+                  width: `${sendProgress}%`,
+                  height: "100%",
+                  background: "#1f6feb"
+                }}
+              />
+            </div>
+
+            <p> Receive Progress: {" "} {receiveProgress} % </p>
+            <div
+              style={{
+                height: "8px",
+                background: "#0f172a",
+                border: "1px solid #1e293b",
+                borderRadius: "999px",
+                overflow: "hidden",
+                marginBottom: "12px"
+              }}
+            >
+              <div
+                style={{
+                  width: `${receiveProgress}%`,
+                  height: "100%",
+                  background: "#1f6feb"
+                }}
+              />
+            </div>
+
+            <div
+              style={{
+                display: "flex",
+                gap: "12px",
+                alignItems: "center",
+                marginTop: "16px"
+              }}
+            >
+              <input
+                type="file"
+                style={{
+                  flex: 1
+                }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) { return }
+                  setSelectedFile(file);
+                }}
+              />
+              <button
+                style={{
+                  background: "#1f6feb",
+                  border: "none",
+                  borderRadius: "10px",
+                  padding: "10px 18px",
+                  color: "white",
+                  fontWeight: 600,
+                  cursor: "pointer"
+                }}
+                onClick={sendFile}> Send File </button>
+            </div>
+
             {downloadUrl && (
-              <div>
-                <p>
-                  URL:
-                  {downloadUrl}
-                </p>
-                <a
-                  href={downloadUrl}
-                  download={
-                    receivedFileName
-                  }
+              <div
+                style={{
+                  marginTop: "20px",
+                  padding: "16px",
+                  background: "#0f172a",
+                  border: "1px solid #1e293b",
+                  borderRadius: "10px"
+                }}
+              >
+                <p
+                  style={{
+                    marginBottom: "10px",
+                    color: "#58a6ff",
+                    fontSize: "18px",
+                    fontWeight: 500
+                  }}
                 >
-                  Download
+                  Latest Received File
+                </p>
+
+                <p style={{ marginBottom: "12px" }} >
+                  📄
                   {" "}
                   {receivedFileName}
+                </p>
+
+                <a
+                  href={downloadUrl}
+                  download={receivedFileName}
+                >
+                  Download
                 </a>
               </div>
             )}
           </div>
+          <div
+            style={{
+              background: "#111827",
+              border: "1px solid #1f2937",
+              borderRadius: "18px",
+              padding: "20px",
+              marginTop: "20px"
+            }}
+          >
+            <h3> Recent Transfers </h3>
+            <div style={{ marginTop: "12px" }}>
+              {transfers.map(
+                (item, index) => (
+                  <div
+                    key={index}
+                    style={{ marginBottom: "8px" }}
+                  >
+                    <div
+                      style={{
+                        padding: "10px",
+                        background: "#0f172a",
+                        borderRadius: "10px",
+                        marginBottom: "8px"
+                      }}
+                    >
+                      {item}
+                    </div>
+                  </div>
+                )
+              )}
+            </div>
+          </div>
         </>
       )}
-    </div>
+    </div >
   );
 }
 
