@@ -34,13 +34,17 @@ function App() {
   const [peers, setPeers] = useState<Peer[]>([]);
   const [incomingRequest, setIncomingRequest] = useState("");
   const [connectedPeer, setConnectedPeer] = useState("");
+  const activeRequestRef = useRef("");
   const connectedPeerRef = useRef("");
   const [connectionState, setConnectionState] = useState("idle");
   const [iceState, setIceState] = useState("waiting");
   const [channelState, setChannelState] = useState("closed");
   const [message, setMessage] = useState("");
   const [messages, setMessages] = useState<string[]>([]);
-  const [transfers, setTransfers] = useState<string[]>([]);
+  const [transfers, setTransfers] = useState<{
+    name: string;
+    time: string;
+  }[]>([]);
   const [receivedText, setReceivedText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [downloadUrl, setDownloadUrl] = useState("");
@@ -51,6 +55,7 @@ function App() {
   const chunkBufferRef = useRef<string[]>([]);
   const { peerConnection, dataChannel, createPeerConnection } = useWebRTC();
 
+
   useEffect(() => {
     socket.on(
       "peer-list",
@@ -59,18 +64,21 @@ function App() {
       }
     );
 
-    socket.on(
-      "incoming-request",
-      ({ from }) => {
-        incomingRequestRef.current = from;
-        setIncomingRequest(from);
-      }
-    );
+    socket.on("incoming-request", ({ from }) => {
+      console.log(
+        "INCOMING REQUEST FROM:",
+        from,
+        "TO:", peerIdRef.current
+      );
+      incomingRequestRef.current = from;
+      setIncomingRequest(from);
+    });
 
     socket.on(
       "request-accepted",
       async ({ from }) => {
-        setConnectedPeer(from);
+        if (connectedPeerRef.current) { return; }
+        if (activeRequestRef.current !== from) { return; }
         connectedPeerRef.current = from;
         await startOffer(from);
       }
@@ -86,12 +94,17 @@ function App() {
           channel.onopen = () => {
             console.log("DATA CHANNEL OPEN");
             setChannelState("open");
+            setMessages([]);
+            setConnectedPeer(connectedPeerRef.current);
           };
           channel.onclose = () => {
-            setChannelState(
-              "closed"
-            );
-          };
+            setChannelState("closed");
+            setConnectedPeer("");
+            connectedPeerRef.current = "";
+            setConnectionState("idle");
+            setIncomingRequest("");
+            incomingRequestRef.current = "";
+          }
           channel.onmessage = handleChannelMessage;
         };
         pc.oniceconnectionstatechange =
@@ -250,8 +263,14 @@ function App() {
         setReceivedFileName(transfer.fileName);
         setDownloadUrl(url);
         setTransfers(prev => [
-          `↓ ${transfer.fileName}`,
-          ...prev
+          ...prev,
+          {
+            name: `↓ ${transfer.fileName}`,
+            time: new Date().toLocaleTimeString([], {
+              hour: "2-digit",
+              minute: "2-digit"
+            })
+          }
         ].slice(0, 10)
         );
         delete activeTransfersRef.current[payload.transferId];
@@ -271,10 +290,30 @@ function App() {
     setRegistered(true);
   }
 
-  function connectToPeer(
-    targetId: string
-  ) {
+  function resetConnection() {
+    if (dataChannel.current) {
+      dataChannel.current.close();
+      dataChannel.current = null;
+    }
+    if (peerConnection.current) {
+      peerConnection.current.close();
+      peerConnection.current = null;
+    }
+    setChannelState("closed");
+    setConnectionState("idle");
+    setConnectedPeer("");
+    connectedPeerRef.current = "";
+    setMessages([]);
+    setReceivedText("");
+    setDownloadUrl("");
+    setReceivedFileName("");
+    setSendProgress(0);
+    setReceiveProgress(0);
+  }
 
+  function connectToPeer(targetId: string) {
+    resetConnection();
+    activeRequestRef.current = targetId;
     socket.emit(
       "connect-request",
       {
@@ -303,18 +342,21 @@ function App() {
       console.log(
         "DATA CHANNEL OPEN"
       );
-      setChannelState(
-        "open"
-      );
+      setChannelState("open");
+      setMessages([]);
+      setConnectedPeer(connectedPeerRef.current);
     };
 
     channel.onmessage = handleChannelMessage;
 
     channel.onclose = () => {
-      setChannelState(
-        "closed"
-      );
-    };
+      setChannelState("closed");
+      setConnectedPeer("");
+      connectedPeerRef.current = "";
+      setConnectionState("idle");
+      setIncomingRequest("");
+      incomingRequestRef.current = "";
+    }
     pc.oniceconnectionstatechange =
       () => {
         console.log(
@@ -358,6 +400,7 @@ function App() {
   }
 
   function acceptRequest() {
+    resetConnection();
     socket.emit(
       "accept-request",
       {
@@ -365,8 +408,10 @@ function App() {
         to: incomingRequest
       }
     );
-    setConnectedPeer(incomingRequest);
+    activeRequestRef.current = "";
     connectedPeerRef.current = incomingRequest;
+    setIncomingRequest("");
+    incomingRequestRef.current = "";
   }
 
   function sendMessage() {
@@ -491,8 +536,15 @@ function App() {
       transferId
     );
     setTransfers(prev => [
-      `↑ ${selectedFile.name}`,
-      ...prev
+      ...prev,
+      {
+        name: `↑ ${selectedFile.name}`,
+        time: new Date().toLocaleTimeString([],
+          {
+            hour: "2-digit",
+            minute: "2-digit"
+          })
+      }
     ].slice(0, 10)
     );
   }
@@ -675,7 +727,7 @@ function App() {
                 <span
                   style={{
                     background: "#1f6feb",
-                    padding: "2px 10px",
+                    padding: "4px 12px",
                     borderRadius: "999px",
                     fontSize: "12px"
                   }}
@@ -757,7 +809,8 @@ function App() {
                 maxHeight: "320px",
                 overflowY: "auto",
                 marginTop: "12px",
-                marginBottom: "12px"
+                marginBottom: "12px",
+                paddingRight: "15px"
               }}
             >
               {messages.map((msg, index) => {
@@ -920,17 +973,12 @@ function App() {
                 </p>
 
                 <p style={{ marginBottom: "12px" }} >
-                  📄
+                  <span style={{ color: "#58a6ff" }} >📄</span>
                   {" "}
                   {receivedFileName}
                 </p>
 
-                <a
-                  href={downloadUrl}
-                  download={receivedFileName}
-                >
-                  Download
-                </a>
+                <a href={downloadUrl} download={receivedFileName} > Download </a>
               </div>
             )}
           </div>
@@ -939,7 +987,7 @@ function App() {
               background: "#111827",
               border: "1px solid #1f2937",
               borderRadius: "18px",
-              padding: "20px",
+              padding: "24px",
               marginTop: "20px"
             }}
           >
@@ -949,18 +997,22 @@ function App() {
                 (item, index) => (
                   <div
                     key={index}
-                    style={{ marginBottom: "8px" }}
+                    style={{
+                      padding: "12px 0",
+                      borderBottom: "1px solid #1f2937",
+                      display: "flex",
+                      justifyContent: "space-between"
+                    }}
                   >
-                    <div
+                    <span> {item.name} </span>
+                    <span
                       style={{
-                        padding: "10px",
-                        background: "#0f172a",
-                        borderRadius: "10px",
-                        marginBottom: "8px"
+                        color: "#64748b",
+                        fontSize: "13px"
                       }}
                     >
-                      {item}
-                    </div>
+                      {item.time}
+                    </span>
                   </div>
                 )
               )}
