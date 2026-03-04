@@ -21,7 +21,7 @@ type ChannelMessage = {
   transferId: string;
   index: number;
   total: number;
-  data: string;
+  data: number[];
 }
 
 function App() {
@@ -45,7 +45,7 @@ function App() {
   const [receivedFileName, setReceivedFileName] = useState("");
   const [sendProgress, setSendProgress] = useState(0);
   const [receiveProgress, setReceiveProgress] = useState(0);
-  const activeTransfersRef = useRef<Record<string, { fileName: string; chunks: string[]; totalChunks: number; }>>({});
+  const activeTransfersRef = useRef<Record<string, { fileName: string; chunks: number[][]; totalChunks: number; }>>({});
   const chunkBufferRef = useRef<string[]>([]);
   const { peerConnection, dataChannel, createPeerConnection } = useWebRTC();
 
@@ -90,67 +90,7 @@ function App() {
               "closed"
             );
           };
-          channel.onmessage = (event) => {
-            const payload = JSON.parse(event.data) as ChannelMessage;
-            if (payload.type === "chat") {
-              setMessages(
-                prev => [
-                  ...prev,
-                  `Peer: ${payload.text}`
-                ]
-              );
-              return;
-            }
-            if (payload.type === "chunk") {
-              chunkBufferRef.current[payload.index] = payload.data;
-              if (chunkBufferRef.current.filter(Boolean).length === payload.total) {
-                const text = chunkBufferRef.current.join("");
-                setReceivedText(text);
-                console.log(
-                  "Reassembled:",
-                  text.length
-                );
-                chunkBufferRef.current = [];
-              }
-              return;
-            }
-            if (payload.type === "file-meta") {
-              activeTransfersRef.current[payload.transferId] = {
-                fileName: payload.fileName,
-                chunks: [],
-                totalChunks: payload.totalChunks
-              };
-              return;
-            }
-            if (payload.type === "file-chunk") {
-              const transfer = activeTransfersRef.current[payload.transferId];
-              if (!transfer) {
-                return;
-              }
-              transfer.chunks[payload.index] = payload.data;
-              const received = transfer.chunks
-                .filter(Boolean)
-                .length;
-
-              setReceiveProgress(Math.floor((received / transfer.totalChunks) * 100));
-
-              if (received === transfer.totalChunks) {
-                const text = transfer.chunks.join("");
-                console.log(
-                  "FILE COMPLETE:",
-                  transfer.fileName,
-                  text.length
-                );
-                const blob = new Blob([text]);
-                const url = URL.createObjectURL(blob);
-                setReceivedFileName(transfer.fileName);
-                setDownloadUrl(url);
-                setReceiveProgress(100);
-                delete activeTransfersRef.current[payload.transferId];
-              }
-              return;
-            }
-          };
+          channel.onmessage = handleChannelMessage;
         };
         pc.oniceconnectionstatechange =
           pc.oniceconnectionstatechange =
@@ -256,6 +196,62 @@ function App() {
 
   }, []);
 
+  function handleChannelMessage(event: MessageEvent) {
+    const payload = JSON.parse(event.data) as ChannelMessage;
+    if (payload.type === "chat") {
+      setMessages(
+        prev => [
+          ...prev,
+          `Peer: ${payload.text}`
+        ]
+      );
+      return;
+    }
+
+    if (payload.type === "chunk") {
+      chunkBufferRef.current[payload.index] = payload.data;
+      if (chunkBufferRef.current.filter(Boolean).length === payload.total) {
+        const text = chunkBufferRef.current.join("");
+        setReceivedText(text);
+        chunkBufferRef.current = [];
+      }
+      return;
+    }
+
+    if (payload.type === "file-meta") {
+      activeTransfersRef.current[payload.transferId] = {
+        fileName: payload.fileName,
+        chunks: [],
+        totalChunks: payload.totalChunks
+      };
+      return;
+    }
+
+    if (payload.type === "file-chunk") {
+      const transfer = activeTransfersRef.current[payload.transferId];
+      if (!transfer) { return }
+      transfer.chunks[payload.index] = payload.data;
+      const received = transfer.chunks.filter(Boolean).length;
+      setReceiveProgress(
+        Math.floor(
+          (received /
+            transfer.totalChunks) *
+          100
+        )
+      );
+
+      if (received === transfer.totalChunks) {
+        const flattened = transfer.chunks.flat();
+        const bytes = new Uint8Array(flattened);
+        const blob = new Blob([bytes]);
+        const url = URL.createObjectURL(blob);
+        setReceivedFileName(transfer.fileName);
+        setDownloadUrl(url);
+        delete activeTransfersRef.current[payload.transferId];
+      }
+    }
+  }
+
   function registerPeer() {
     if (!peerId.trim()) {
       return;
@@ -305,31 +301,7 @@ function App() {
       );
     };
 
-    channel.onmessage = (event) => {
-      const payload = JSON.parse(event.data) as ChannelMessage;
-      if (payload.type === "chat") {
-        setMessages(
-          prev => [
-            ...prev,
-            `Peer: ${payload.text}`
-          ]
-        );
-        return;
-      }
-      if (payload.type === "chunk") {
-        chunkBufferRef.current[payload.index] = payload.data;
-        if (chunkBufferRef.current.filter(Boolean).length === payload.total) {
-          const text = chunkBufferRef.current.join("");
-          setReceivedText(text);
-          console.log(
-            "Reassembled:",
-            text.length
-          );
-          chunkBufferRef.current = [];
-        }
-        return;
-      }
-    };
+    channel.onmessage = handleChannelMessage;
 
     channel.onclose = () => {
       setChannelState(
@@ -422,23 +394,29 @@ function App() {
   function sendLargeText() {
     if (!dataChannel.current) { return; }
     const text = generateLargeText();
-    const chunkSize = 16_000;
-    const totalChunks = Math.ceil(
-      text.length /
-      chunkSize
-    );
+    const chunkSize = 16000;
+    const totalChunks = Math.ceil(text.length / chunkSize);
     for (let i = 0; i < totalChunks; i++) {
-      const chunk = text.slice(i * chunkSize, (i + 1) * chunkSize);
+      const chunk = text.slice(
+        i * chunkSize,
+        (i + 1) *
+        chunkSize
+      );
+
       const payload: ChannelMessage = {
         type: "chunk",
         index: i,
         total: totalChunks,
         data: chunk
       };
+
       dataChannel.current.send(
-        JSON.stringify(payload)
+        JSON.stringify(
+          payload
+        )
       );
     }
+
     console.log(
       "Sent chunks:",
       totalChunks
@@ -449,12 +427,10 @@ function App() {
     if (!selectedFile) { return; }
     if (!dataChannel.current) { return; }
     setSendProgress(0);
-    const text = await selectedFile.text();
+    const buffer = await selectedFile.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
     const chunkSize = 16000;
-    const totalChunks = Math.ceil(
-      text.length /
-      chunkSize
-    );
+    const totalChunks = Math.ceil(bytes.length / chunkSize);
     const transferId = crypto.randomUUID();
     const meta: ChannelMessage = {
       type: "file-meta",
@@ -481,21 +457,18 @@ function App() {
             )
         );
       }
-      const chunk =
-        text.slice(
+      const chunk = Array.from(
+        bytes.slice(
           i * chunkSize,
           (i + 1) *
           chunkSize
-        );
-
-      const payload:
-        ChannelMessage = {
-        type:
-          "file-chunk",
+        )
+      );
+      const payload: ChannelMessage = {
+        type: "file-chunk",
         transferId,
         index: i,
-        total:
-          totalChunks,
+        total: totalChunks,
         data: chunk
       };
 
