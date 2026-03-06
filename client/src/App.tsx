@@ -45,7 +45,7 @@ function App() {
     name: string;
     time: string;
   }[]>([]);
-  const [receivedText, setReceivedText] = useState("");
+  const [_, setReceivedText] = useState("");
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [downloadUrl, setDownloadUrl] = useState("");
   const [receivedFileName, setReceivedFileName] = useState("");
@@ -156,7 +156,7 @@ function App() {
 
     socket.on(
       "answer",
-      async ({ answer, from }) => {
+      async ({ answer }) => {
         if (!peerConnection.current) {
           return;
         }
@@ -437,44 +437,6 @@ function App() {
     setMessage("");
   }
 
-  function generateLargeText() {
-    return "A".repeat(
-      500_000
-    );
-  }
-
-  function sendLargeText() {
-    if (!dataChannel.current) { return; }
-    const text = generateLargeText();
-    const chunkSize = 16000;
-    const totalChunks = Math.ceil(text.length / chunkSize);
-    for (let i = 0; i < totalChunks; i++) {
-      const chunk = text.slice(
-        i * chunkSize,
-        (i + 1) *
-        chunkSize
-      );
-
-      const payload: ChannelMessage = {
-        type: "chunk",
-        index: i,
-        total: totalChunks,
-        data: chunk
-      };
-
-      dataChannel.current.send(
-        JSON.stringify(
-          payload
-        )
-      );
-    }
-
-    console.log(
-      "Sent chunks:",
-      totalChunks
-    );
-  }
-
   async function sendFile() {
     if (!selectedFile) { return; }
     if (!dataChannel.current) { return; }
@@ -569,7 +531,7 @@ function App() {
             letterSpacing: "-2px"
           }}
         >
-          PortShare
+          PeerShare
         </h1>
 
         <p

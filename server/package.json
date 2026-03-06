@@ -4,9 +4,9 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "node --experimental-strip-types --watch index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js"
+    "build": "esbuild index.ts --bundle --platform=node --target=node22 --format=esm --packages=external --outfile=dist/index.js",
+    "start": "node dist/index.js",
+    "dev": "node --experimental-strip-types --watch index.ts"
   },
   "keywords": [],
   "author": "",
@@ -20,6 +20,7 @@
   "devDependencies": {
     "@types/express": "^5.0.6",
     "@types/node": "^26.0.0",
+    "esbuild": "^0.28.1",
     "ts-node-dev": "^2.0.0",
     "typescript": "^6.0.3"
   }
